@@ -24,7 +24,7 @@ import okio.GzipSource;
 public final class RetroLoggingInterceptor implements Interceptor {
 
 	private static final Charset UTF8  = Charset.forName("UTF-8");
-	private volatile Level       level = Level.NONE;
+	private volatile Level       level = Level.BASIC;
 
 	public enum Level {
 		NONE, BASIC, HEADERS, BODY
@@ -32,9 +32,13 @@ public final class RetroLoggingInterceptor implements Interceptor {
 
 	public RetroLoggingInterceptor() {}
 
+	public RetroLoggingInterceptor(final Level level) {
+		this.level = level;
+	}
+
 	private volatile Set<String> headersToRedact = Collections.emptySet();
 
-	public void redactHeader(String name) {
+	public final void redactHeader(String name) {
 		Set<String> newHeadersToRedact = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
 		newHeadersToRedact.addAll(headersToRedact);
 		newHeadersToRedact.add(name);
@@ -47,7 +51,7 @@ public final class RetroLoggingInterceptor implements Interceptor {
 		return this;
 	}
 
-	public Level getLevel() {
+	public final Level getLevel() {
 		return level;
 	}
 
@@ -55,7 +59,7 @@ public final class RetroLoggingInterceptor implements Interceptor {
 	public Response intercept(Chain chain) throws IOException {
 		Logger logger = chain.request().tag(Logger.class);
 		if (logger == null) logger = Logger.CONSOLE;
-		//Level level = this.level;
+		final Level level = this.level;
 
 		Request request = chain.request();
 		if (level == Level.NONE) { return chain.proceed(request); }
@@ -122,8 +126,8 @@ public final class RetroLoggingInterceptor implements Interceptor {
 		ResponseBody responseBody  = response.body();
 		long         contentLength = responseBody.contentLength();
 		String       bodySize      = contentLength != -1 ? contentLength + "-byte" : "unknown-length";
-		logger.log("<-- " + response.code() + (response.message().isEmpty() ? "" : ' ' + response.message()) + ' ' + response.request().url() + " (" + tookMs + "ms"
-				+ (!logHeaders ? ", " + bodySize + " body" : "") + ')');
+		logger.log("<-- " + response.code() + (response.message().isEmpty() ? "" : ' ' + response.message()) + ' ' + response.request().url() + " (" + tookMs
+				+ "ms" + (!logHeaders ? ", " + bodySize + " body" : "") + ')');
 
 		if (logHeaders) {
 			Headers headers = response.headers();
@@ -141,7 +145,7 @@ public final class RetroLoggingInterceptor implements Interceptor {
 				Long gzippedLength = null;
 				if ("gzip".equalsIgnoreCase(headers.get("Content-Encoding"))) {
 					gzippedLength = buffer.size();
-					try (GzipSource gzippedResponseBody = new GzipSource(buffer.clone())) {
+					try(GzipSource gzippedResponseBody = new GzipSource(buffer.clone())) {
 						buffer = new Buffer();
 						buffer.writeAll(gzippedResponseBody);
 					}
@@ -173,12 +177,12 @@ public final class RetroLoggingInterceptor implements Interceptor {
 		return response;
 	}
 
-	private void logHeader(final Logger logger, final Headers headers, final int i) {
+	private final void logHeader(final Logger logger, final Headers headers, final int i) {
 		String value = headersToRedact.contains(headers.name(i)) ? "██" : headers.value(i);
 		logger.log(headers.name(i) + ": " + value);
 	}
 
-	private static boolean isPlaintext(Buffer buffer) {
+	private static final boolean isPlaintext(Buffer buffer) {
 		try {
 			Buffer prefix    = new Buffer();
 			long   byteCount = buffer.size() < 64 ? buffer.size() : 64;
@@ -190,11 +194,11 @@ public final class RetroLoggingInterceptor implements Interceptor {
 			}
 			return true;
 		} catch (EOFException e) {
-			return false;
+			return false; // Truncated UTF-8 sequence.
 		}
 	}
 
-	private static boolean bodyHasUnknownEncoding(Headers headers) {
+	private static final boolean bodyHasUnknownEncoding(Headers headers) {
 		String contentEncoding = headers.get("Content-Encoding");
 		return contentEncoding != null && !contentEncoding.equalsIgnoreCase("identity") && !contentEncoding.equalsIgnoreCase("gzip");
 	}

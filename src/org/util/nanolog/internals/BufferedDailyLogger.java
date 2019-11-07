@@ -15,6 +15,7 @@ public final class BufferedDailyLogger extends Logger {
 
 	public BufferedDailyLogger(LogWriter logWriter) {
 		this.writer = logWriter.getWriter();
+		list.add("\r\n-----**-----\r\n");
 	}
 
 	@Override
